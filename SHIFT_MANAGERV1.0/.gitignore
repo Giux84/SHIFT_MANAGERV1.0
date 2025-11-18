@@ -44,3 +44,10 @@ desktop.ini
 
 # Logs
 *.log
+
+# PyInstaller
+*.spec
+ShiftManager.spec
+
+# Config files (user-specific)
+shift_manager_config.json

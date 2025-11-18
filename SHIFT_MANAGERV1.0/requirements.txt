@@ -1,0 +1,14 @@
+# Shift Manager - Requirements
+
+# Core dependencies
+pandas>=2.0.0
+openpyxl>=3.1.0
+xlrd>=2.0.1
+
+# GUI dependencies
+customtkinter>=5.2.0
+pillow>=10.0.0
+darkdetect>=0.8.0
+
+# Build dependencies (optional - solo per creare .exe)
+# pyinstaller>=6.0.0

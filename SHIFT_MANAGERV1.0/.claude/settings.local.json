@@ -7,7 +7,12 @@
       "Bash(git add:*)",
       "Bash(git commit -m \"$(cat <<''EOF''\nInitial commit: Sistema generazione turni raffineria v1.0\n\n- Implementato generatore automatico turni annuali\n- Gestione continuità ciclo tra anni (2024→2025)\n- Pattern normale (10 giorni) e estivo (9 giorni)\n- Rotazione quinquennale ferie (1→3→5→2→4)\n- Verifica copertura 2-2-2 automatica\n- Output Excel formattato con:\n  * Colori: rosso (dom/festivi), azzurro (sabati)\n  * Giallo chiaro (ferie), verde chiaro (G eccetto T46)\n  * Righe bianche separatrici per turno 46\n  * Bordi colonne finali (Turno, gg., Progr.)\n  * Progressivo per turno (max 231 gg)\n- Documentazione completa (README, ROTAZIONE_FERIE, QUICK_START)\n- Report verifica anomalie\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
       "Bash(gh repo create:*)",
-      "Bash(where gh:*)"
+      "Bash(where gh:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)",
+      "Bash(python shift_manager_gui.py:*)",
+      "Bash(timeout:*)",
+      "Bash(python build_exe.py:*)"
     ],
     "deny": [],
     "ask": []

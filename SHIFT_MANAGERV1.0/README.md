@@ -2,6 +2,20 @@
 
 Sistema automatico per la generazione dei turni annuali della raffineria, con gestione della continuità del ciclo e rotazione quinquennale delle ferie.
 
+## 🎯 DUE MODALITÀ DISPONIBILI
+
+### 🖥️ **INTERFACCIA GRAFICA (CONSIGLIATA)**
+- **Eseguibile standalone**: `dist/ShiftManager.exe` (non serve Python!)
+- Interfaccia moderna e intuitiva
+- Anteprima calendario integrata
+- Opzioni avanzate personalizzabili
+- **👉 Leggi**: `QUICK_START_GUI.md` per iniziare subito!
+
+### 💻 **Linea di Comando (Avanzata)**
+- Script Python: `turni_generator.py`
+- Per utenti tecnici o automazione
+- **👉 Continua a leggere** questa guida
+
 ## CARATTERISTICHE
 
 - **Continuità automatica**: Calcola automaticamente l'offset di partenza per il nuovo anno basandosi sull'ultimo giorno dell'anno precedente
@@ -23,10 +37,20 @@ pip install pandas openpyxl xlrd
 
 ```
 SHIFT_MANAGERV1.0/
-├── turni_generator.py       # Script principale
-├── README.md                 # Questa guida
-├── TURNO_COMPLETO_2025.xlsx # Output generato
-└── report_verifica.txt      # Report verifica copertura
+├── dist/
+│   └── ShiftManager.exe              # 🎯 ESEGUIBILE GUI (avvia questo!)
+├── turni_generator.py                # Core: generatore turni
+├── shift_manager_gui.py              # GUI: applicazione principale
+├── config.py                         # Gestione configurazioni
+├── advanced_options_dialog.py        # Dialog opzioni avanzate
+├── preview_dialog.py                 # Dialog anteprima calendario
+├── build_exe.py                      # Script build eseguibile
+├── requirements.txt                  # Dipendenze Python
+├── README.md                         # Guida completa
+├── README_GUI.md                     # Guida dettagliata GUI
+├── QUICK_START_GUI.md                # 🚀 Avvio rapido GUI
+├── ROTAZIONE_FERIE.md                # Documentazione ferie
+└── .gitignore                        # Git ignore rules
 ```
 
 ## UTILIZZO
