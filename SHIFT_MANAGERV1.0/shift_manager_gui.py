@@ -34,8 +34,11 @@ class ShiftManagerApp(ctk.CTk):
 
         # Configurazione finestra
         self.title("Shift Manager - Generatore Turni Raffineria")
-        self.geometry("900x700")
-        self.minsize(800, 600)
+        self.geometry("1100x950")
+        self.minsize(1000, 850)
+
+        # Massimizza la finestra all'avvio
+        # self.state('zoomed')  # Decommentare per aprire massimizzata
 
         # Config manager
         self.config_manager = ConfigManager()

@@ -169,6 +169,8 @@ class GeneratoreTurni:
         self.calendario = {}  # {data: {turno: codice}}
         self.template_data = None
         self.offset_iniziale = {}
+        # Contatore G per mese per ogni turno {turno: {mese: conteggio}}
+        self.g_counter = {turno: {} for turno in TURNI}
 
     def leggi_template(self) -> bool:
         """Legge il file template dell'anno precedente"""
@@ -306,10 +308,15 @@ class GeneratoreTurni:
         codice_base = PATTERN_NORMALE[posizione]
 
         # Gestione G: sostituisce il '-' in posizione 5 (dopo AA)
-        # Solo nei mesi con G e MAI in weekend/festivi
+        # LIMITE: massimo 1 G al mese, solo nei mesi con G e MAI in weekend/festivi
         if posizione == 5 and data.month in MESI_CON_G:
             if codice_base == '-' and not is_weekend_or_festivo(data):
-                return 'G'
+                # Verifica se abbiamo già messo 1 G in questo mese per questo turno
+                mese = data.month
+                if self.g_counter[turno].get(mese, 0) < 1:
+                    # Aggiungi G e incrementa contatore
+                    self.g_counter[turno][mese] = self.g_counter[turno].get(mese, 0) + 1
+                    return 'G'
 
         return codice_base
 

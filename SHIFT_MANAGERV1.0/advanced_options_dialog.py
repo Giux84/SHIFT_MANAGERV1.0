@@ -19,8 +19,8 @@ class AdvancedOptionsDialog(ctk.CTkToplevel):
 
         # Configurazione finestra
         self.title("⚙️ Opzioni Avanzate")
-        self.geometry("700x600")
-        self.minsize(650, 550)
+        self.geometry("800x750")
+        self.minsize(750, 700)
 
         # Crea UI
         self.create_widgets()
