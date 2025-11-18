@@ -15,7 +15,7 @@ PyInstaller.__main__.run([
     '--name=ShiftManager',   # Nome eseguibile
     '--onefile',             # Singolo file .exe
     '--windowed',            # No console window
-    '--clean',               # Pulisci cache
+    # '--clean',             # Pulisci cache (commentato per evitare errori permessi)
 
     # Icona (opzionale - se non c'è, usa default)
     # '--icon=icon.ico',
