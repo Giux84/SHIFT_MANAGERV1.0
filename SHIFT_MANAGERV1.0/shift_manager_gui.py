@@ -540,11 +540,20 @@ class ShiftManagerApp(ctk.CTk):
             generatore.applica_ferie()
 
             self.after(0, lambda: self.log("Ferie applicate", "success"))
-            self.after(0, lambda: self.update_progress(0.8, "Ferie applicate"))
+            self.after(0, lambda: self.update_progress(0.75, "Ferie applicate"))
 
-            # Step 4: Verifica copertura
+            # Step 4: Bilanciamento giorni lavorativi
+            self.after(0, lambda: self.log("Bilanciamento giorni lavorativi (target 231)...", "info"))
+            self.after(0, lambda: self.update_progress(0.8, "Bilanciamento giorni..."))
+
+            generatore.bilancia_giorni_lavorativi(231)
+
+            self.after(0, lambda: self.log("Bilanciamento completato", "success"))
+            self.after(0, lambda: self.update_progress(0.85, "Bilanciamento completato"))
+
+            # Step 5: Verifica copertura
             self.after(0, lambda: self.log("Verifica copertura 2-2-2...", "info"))
-            self.after(0, lambda: self.update_progress(0.85, "Verifica copertura..."))
+            self.after(0, lambda: self.update_progress(0.9, "Verifica copertura..."))
 
             verifica = generatore.verifica_copertura()
 
@@ -562,9 +571,9 @@ class ShiftManagerApp(ctk.CTk):
                     "success"
                 ))
 
-            # Step 5: Generazione Excel
+            # Step 6: Generazione Excel
             self.after(0, lambda: self.log("Generazione file Excel...", "info"))
-            self.after(0, lambda: self.update_progress(0.9, "Creazione file Excel..."))
+            self.after(0, lambda: self.update_progress(0.95, "Creazione file Excel..."))
 
             generatore.genera_excel(output_file)
 

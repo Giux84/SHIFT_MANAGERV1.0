@@ -307,9 +307,12 @@ class GeneratoreTurni:
         posizione = (offset + giorni_trascorsi) % 10
         codice_base = PATTERN_NORMALE[posizione]
 
-        # Gestione G: sostituisce il '-' in posizione 5 (dopo AA)
+        # Gestione G: sostituisce il '-' in posizione 4 (DOPO le due mattine AA)
+        # Pattern: B - A A - - C C - B
+        #          0 1 2 3 4 5 6 7 8 9
+        #                  ^ qui (posizione 4, primo riposo dopo AA)
         # LIMITE: massimo 1 G al mese, solo nei mesi con G e MAI in weekend/festivi
-        if posizione == 5 and data.month in MESI_CON_G:
+        if posizione == 4 and data.month in MESI_CON_G:
             if codice_base == '-' and not is_weekend_or_festivo(data):
                 # Verifica se abbiamo già messo 1 G in questo mese per questo turno
                 mese = data.month
@@ -352,6 +355,106 @@ class GeneratoreTurni:
                 self._applica_ferie_turno(turno, periodo)
 
         print("Ferie applicate")
+
+    def bilancia_giorni_lavorativi(self, target: int = 231):
+        """Bilancia i giorni lavorativi per ogni turno per raggiungere esattamente il target"""
+        print(f"\nBilanciamento giorni lavorativi (target: {target})...")
+
+        for turno in TURNI:
+            if turno == 46:
+                continue  # Il turno 46 ha regole speciali, non bilanciare
+
+            # Conta giorni lavorativi attuali
+            giorni_attuali = 0
+            for data, codici in self.calendario.items():
+                codice = codici[turno]
+                if codice in ['A', 'B', 'C', 'G'] or codice.startswith('F'):
+                    giorni_attuali += 1
+
+            differenza = target - giorni_attuali
+
+            if differenza > 0:
+                # Servono più giorni: aggiungi G extra
+                print(f"  Turno {turno}: {giorni_attuali} giorni, aggiungo {differenza} G")
+                self._aggiungi_g_extra(turno, differenza)
+            elif differenza < 0:
+                # Troppi giorni: rimuovi alcuni G
+                print(f"  Turno {turno}: {giorni_attuali} giorni, rimuovo {-differenza} G")
+                self._rimuovi_g_extra(turno, -differenza)
+            else:
+                print(f"  Turno {turno}: {giorni_attuali} giorni OK")
+
+        print("Bilanciamento completato")
+
+    def _aggiungi_g_extra(self, turno: int, quanti: int):
+        """Aggiunge G extra nei mesi disponibili per raggiungere il target"""
+        aggiunti = 0
+
+        # Prima, conta quanti G ci sono già per mese
+        g_per_mese = {}
+        for data, codici in self.calendario.items():
+            if codici[turno] == 'G':
+                mese = data.month
+                g_per_mese[mese] = g_per_mese.get(mese, 0) + 1
+
+        # Priorità: MAGGIO (mese 5) per G extra, poi gli altri mesi
+        # Mesi disponibili: 1, 2, 3, 4, 5, 10, 11 (ma 5=MAGGIO ha priorità)
+        mesi_priorita = [5, 1, 2, 3, 4, 10, 11]  # Maggio prima!
+
+        for mese_target in mesi_priorita:
+            if aggiunti >= quanti:
+                break
+
+            # Salta se questo mese ha già un G (limite 1 per mese, eccetto maggio)
+            if mese_target != 5 and g_per_mese.get(mese_target, 0) >= 1:
+                continue
+
+            # Cerca riposi disponibili in questo mese
+            for data in sorted(self.calendario.keys()):
+                if aggiunti >= quanti:
+                    break
+
+                if data.month != mese_target:
+                    continue
+
+                codice = self.calendario[data][turno]
+
+                # Converti riposi in G
+                if codice == '-' and not is_weekend_or_festivo(data):
+                    # Verifica il pattern: deve essere dopo AA
+                    primo_gennaio = date(data.year, 1, 1)
+                    giorni_trascorsi = (data - primo_gennaio).days
+                    offset = self.offset_iniziale.get(turno, OFFSET_NORMALE.get(turno, 0))
+                    posizione = (offset + giorni_trascorsi) % 10
+
+                    # Aggiungi G solo in posizione 4 o 5 (riposi dopo AA)
+                    if posizione in [4, 5]:
+                        self.calendario[data][turno] = 'G'
+                        aggiunti += 1
+                        # Aggiorna contatore
+                        g_per_mese[mese_target] = g_per_mese.get(mese_target, 0) + 1
+                        # Se non siamo a maggio, esci dopo 1 G per mese
+                        if mese_target != 5:
+                            break
+
+    def _rimuovi_g_extra(self, turno: int, quanti: int):
+        """Rimuove G extra per raggiungere il target"""
+        rimossi = 0
+
+        # Cerca G da rimuovere (in ordine inverso per togliere gli ultimi)
+        for data in sorted(self.calendario.keys(), reverse=True):
+            if rimossi >= quanti:
+                break
+
+            if data.month not in MESI_CON_G:
+                continue
+
+            codice = self.calendario[data][turno]
+
+            # Converti G in riposi
+            if codice == 'G':
+                self.calendario[data][turno] = '-'
+                rimossi += 1
 
     def _applica_ferie_turno(self, turno: int, periodo: int):
         """Applica le ferie a un turno per un periodo specifico"""
@@ -667,7 +770,10 @@ def main():
     # Step 3: Applicazione ferie
     generatore.applica_ferie()
 
-    # Step 4: Verifica copertura
+    # Step 4: Bilanciamento giorni lavorativi (target 231)
+    generatore.bilancia_giorni_lavorativi(231)
+
+    # Step 5: Verifica copertura
     verifica = generatore.verifica_copertura()
 
     # Step 5: Generazione output
