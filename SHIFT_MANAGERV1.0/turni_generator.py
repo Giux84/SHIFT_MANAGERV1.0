@@ -63,7 +63,7 @@ OFFSET_ESTIVO = {
 }
 
 # Mesi con G
-MESI_CON_G = [1, 2, 3, 4, 10, 11]  # Gen, Feb, Mar, Apr, Ott, Nov
+MESI_CON_G = [1, 2, 3, 4, 10]  # Gen, Feb, Mar, Apr, Ott (SOLO questi mesi base)
 
 # Festività italiane 2025
 FESTIVITA_2025 = [
@@ -218,27 +218,80 @@ class GeneratoreTurni:
         """Calcola l'offset iniziale per ogni turno basandosi sull'ultimo giorno del template"""
         ultimo_giorno = calendar.monthrange(self.anno_template, mese)[1]
 
-        # Il 2024 è bisestile (366 giorni)
-        giorni_anno = 366 if calendar.isleap(self.anno_template) else 365
+        print(f"Calcolo offset dal 31/12/{self.anno_template}...")
 
         for turno in TURNI:
             if turno == 46:
-                self.offset_iniziale[46] = 0  # Il turno 46 è speciale
+                # Turno 46: pattern speciale, leggi l'ultimo giorno e calcola
+                turno_row = df[df.iloc[:, 0] == turno]
+                if not turno_row.empty:
+                    ultimo_codice = turno_row.iloc[0, ultimo_giorno]
+                    if pd.isna(ultimo_codice):
+                        ultimo_codice = '-'
+                    else:
+                        ultimo_codice = str(ultimo_codice).strip()
+
+                    # Trova posizione nel pattern del T46
+                    try:
+                        pos_attuale = PATTERN_46_NORMALE.index(ultimo_codice)
+                        # Posizione per il 1° gennaio è la successiva
+                        self.offset_iniziale[46] = (pos_attuale + 1) % 10
+                    except ValueError:
+                        self.offset_iniziale[46] = 0
+                else:
+                    self.offset_iniziale[46] = 0
                 continue
 
-            # Trova la riga del turno
+            # Trova la riga del turno nel template
             turno_row = df[df.iloc[:, 0] == turno]
             if turno_row.empty:
-                print(f"Attenzione: turno {turno} non trovato nel template")
+                print(f"  Attenzione: turno {turno} non trovato nel template")
                 self.offset_iniziale[turno] = OFFSET_NORMALE.get(turno, 0)
                 continue
 
-            # L'offset normale per periodo normale
-            offset_base = OFFSET_NORMALE.get(turno, 0)
+            # Leggi gli ultimi 3 giorni per determinare la posizione esatta
+            ultimi_codici = []
+            for giorno in range(max(1, ultimo_giorno - 2), ultimo_giorno + 1):
+                cod = turno_row.iloc[0, giorno]
+                if pd.isna(cod):
+                    ultimi_codici.append('-')
+                else:
+                    c = str(cod).strip()
+                    # Normalizza G -> - per il pattern matching
+                    if c == 'G':
+                        ultimi_codici.append('-')
+                    elif c.startswith('F'):
+                        # Ferie: estrai il turno base (FA->A, FB->B, ecc.)
+                        ultimi_codici.append(c[1] if len(c) > 1 else '-')
+                    else:
+                        ultimi_codici.append(c)
 
-            # Calcola la nuova posizione dopo 366 giorni
-            # Per ciclo 10 giorni
-            self.offset_iniziale[turno] = (offset_base + giorni_anno) % 10
+            # Trova la sequenza nel pattern ciclico
+            # Pattern: B - A A - - C C - B (posizioni 0-9)
+            pattern_esteso = PATTERN_NORMALE * 2  # Duplica per gestire il wrap-around
+
+            # Cerca la sequenza degli ultimi giorni nel pattern
+            pos_trovata = None
+            for start_pos in range(10):
+                match = True
+                for i, cod in enumerate(ultimi_codici):
+                    if pattern_esteso[start_pos + i] != cod:
+                        match = False
+                        break
+                if match:
+                    # Trovato! La posizione attuale è start_pos + len(ultimi_codici) - 1
+                    pos_attuale = (start_pos + len(ultimi_codici) - 1) % 10
+                    pos_trovata = pos_attuale
+                    break
+
+            if pos_trovata is not None:
+                # La posizione per il 1° gennaio è la successiva
+                self.offset_iniziale[turno] = (pos_trovata + 1) % 10
+                print(f"  Turno {turno}: ultimi giorni {ultimi_codici} -> pos {pos_trovata} -> offset 1/1 = {self.offset_iniziale[turno]}")
+            else:
+                # Non trovato, usa default
+                print(f"  Turno {turno}: pattern non riconosciuto {ultimi_codici}, uso default")
+                self.offset_iniziale[turno] = OFFSET_NORMALE.get(turno, 0)
 
         print(f"Offset iniziali calcolati: {self.offset_iniziale}")
 
@@ -307,19 +360,9 @@ class GeneratoreTurni:
         posizione = (offset + giorni_trascorsi) % 10
         codice_base = PATTERN_NORMALE[posizione]
 
-        # Gestione G: sostituisce il '-' in posizione 4 (DOPO le due mattine AA)
-        # Pattern: B - A A - - C C - B
-        #          0 1 2 3 4 5 6 7 8 9
-        #                  ^ qui (posizione 4, primo riposo dopo AA)
-        # LIMITE: massimo 1 G al mese, solo nei mesi con G e MAI in weekend/festivi
-        if posizione == 4 and data.month in MESI_CON_G:
-            if codice_base == '-' and not is_weekend_or_festivo(data):
-                # Verifica se abbiamo già messo 1 G in questo mese per questo turno
-                mese = data.month
-                if self.g_counter[turno].get(mese, 0) < 1:
-                    # Aggiungi G e incrementa contatore
-                    self.g_counter[turno][mese] = self.g_counter[turno].get(mese, 0) + 1
-                    return 'G'
+        # NON aggiungere G automaticamente durante la generazione base
+        # I giorni G verranno aggiunti DOPO durante il bilanciamento
+        # Questo assicura la corretta distribuzione secondo la strategia ufficiale
 
         return codice_base
 
@@ -364,11 +407,12 @@ class GeneratoreTurni:
             if turno == 46:
                 continue  # Il turno 46 ha regole speciali, non bilanciare
 
-            # Conta giorni lavorativi attuali
+            # Conta giorni lavorativi attuali (A, B, C, G + Ferie)
             giorni_attuali = 0
             for data, codici in self.calendario.items():
                 codice = codici[turno]
-                if codice in ['A', 'B', 'C', 'G'] or codice.startswith('F'):
+                # Conta shifts (A,B,C,G) e ferie (F*)
+                if codice in ['A', 'B', 'C', 'G'] or (isinstance(codice, str) and codice.startswith('F')):
                     giorni_attuali += 1
 
             differenza = target - giorni_attuali
@@ -387,7 +431,10 @@ class GeneratoreTurni:
         print("Bilanciamento completato")
 
     def _aggiungi_g_extra(self, turno: int, quanti: int):
-        """Aggiunge G extra nei mesi disponibili per raggiungere il target"""
+        """Aggiunge G extra nei mesi disponibili seguendo la strategia ufficiale:
+        1. Prima aggiunge 1 G in Gen, Feb, Mar, Apr, Ott (baseline)
+        2. Poi aggiunge G extra in Maggio se necessario
+        """
         aggiunti = 0
 
         # Prima, conta quanti G ci sono già per mese
@@ -397,19 +444,22 @@ class GeneratoreTurni:
                 mese = data.month
                 g_per_mese[mese] = g_per_mese.get(mese, 0) + 1
 
-        # Priorità: MAGGIO (mese 5) per G extra, poi gli altri mesi
-        # Mesi disponibili: 1, 2, 3, 4, 5, 10, 11 (ma 5=MAGGIO ha priorità)
-        mesi_priorita = [5, 1, 2, 3, 4, 10, 11]  # Maggio prima!
+        # STRATEGIA UFFICIALE:
+        # Prima fase: 1 G in Gen, Feb, Mar, Apr, Ott (baseline per tutti)
+        # Seconda fase: Extra G in Maggio se necessario
+        mesi_baseline = [1, 2, 3, 4, 10]  # Gen, Feb, Mar, Apr, Ott
+        mese_extra = 5  # Maggio per G addizionali
 
-        for mese_target in mesi_priorita:
+        # Fase 1: Aggiungi 1 G nei mesi baseline (se mancante)
+        for mese_target in mesi_baseline:
             if aggiunti >= quanti:
                 break
 
-            # Salta se questo mese ha già un G (limite 1 per mese, eccetto maggio)
-            if mese_target != 5 and g_per_mese.get(mese_target, 0) >= 1:
+            # Salta se questo mese ha già 1 G
+            if g_per_mese.get(mese_target, 0) >= 1:
                 continue
 
-            # Cerca riposi disponibili in questo mese
+            # Cerca un riposo disponibile in posizione corretta
             for data in sorted(self.calendario.keys()):
                 if aggiunti >= quanti:
                     break
@@ -419,23 +469,49 @@ class GeneratoreTurni:
 
                 codice = self.calendario[data][turno]
 
-                # Converti riposi in G
+                # Converti riposo in G (preferibilmente posizione 4, fallback posizione 5)
                 if codice == '-' and not is_weekend_or_festivo(data):
-                    # Verifica il pattern: deve essere dopo AA
+                    # Verifica pattern: preferenza per posizione 4, ma accetta anche 5
                     primo_gennaio = date(data.year, 1, 1)
                     giorni_trascorsi = (data - primo_gennaio).days
                     offset = self.offset_iniziale.get(turno, OFFSET_NORMALE.get(turno, 0))
                     posizione = (offset + giorni_trascorsi) % 10
 
-                    # Aggiungi G solo in posizione 4 o 5 (riposi dopo AA)
+                    # G preferibilmente in posizione 4 (dopo AA), oppure 5 se necessario
                     if posizione in [4, 5]:
                         self.calendario[data][turno] = 'G'
                         aggiunti += 1
-                        # Aggiorna contatore
                         g_per_mese[mese_target] = g_per_mese.get(mese_target, 0) + 1
-                        # Se non siamo a maggio, esci dopo 1 G per mese
-                        if mese_target != 5:
-                            break
+                        break  # Max 1 G per mese baseline
+
+        # Fase 2: Se servono ancora G, aggiungi in Maggio
+        if aggiunti < quanti:
+            # Cerca riposi in Maggio
+            for data in sorted(self.calendario.keys()):
+                if aggiunti >= quanti:
+                    break
+
+                if data.month != mese_extra:
+                    continue
+
+                # Salta se Maggio ha già 1 G
+                if g_per_mese.get(mese_extra, 0) >= 1:
+                    break
+
+                codice = self.calendario[data][turno]
+
+                if codice == '-' and not is_weekend_or_festivo(data):
+                    primo_gennaio = date(data.year, 1, 1)
+                    giorni_trascorsi = (data - primo_gennaio).days
+                    offset = self.offset_iniziale.get(turno, OFFSET_NORMALE.get(turno, 0))
+                    posizione = (offset + giorni_trascorsi) % 10
+
+                    # G in posizione 4 o 5 (entrambi riposi nel pattern)
+                    if posizione in [4, 5]:
+                        self.calendario[data][turno] = 'G'
+                        aggiunti += 1
+                        g_per_mese[mese_extra] = g_per_mese.get(mese_extra, 0) + 1
+                        break  # Max 1 G anche in Maggio
 
     def _rimuovi_g_extra(self, turno: int, quanti: int):
         """Rimuove G extra per raggiungere il target"""
