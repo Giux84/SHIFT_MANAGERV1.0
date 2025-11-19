@@ -49,8 +49,8 @@ OFFSET_NORMALE = {
     46: None  # Turno speciale
 }
 
-# Pattern turno 46 periodo normale
-PATTERN_46_NORMALE = ['-', 'G', 'G', '-', 'G', 'G', '-', 'G', 'G', '-']
+# Pattern turno 46 periodo normale (da template dicembre 2024)
+PATTERN_46_NORMALE = ['-', '-', 'G', 'G', '-', 'G', 'G', '-', 'G', 'G']
 
 # Pattern periodo estivo (20 Giu - 13 Set circa) - Ciclo 9 giorni
 PATTERN_ESTIVO = ['B', '-', 'A', 'A', '-', 'C', 'C', '-', 'B']
@@ -404,9 +404,6 @@ class GeneratoreTurni:
         print(f"\nBilanciamento giorni lavorativi (target: {target})...")
 
         for turno in TURNI:
-            if turno == 46:
-                continue  # Il turno 46 ha regole speciali, non bilanciare
-
             # Conta giorni lavorativi attuali (A, B, C, G + Ferie)
             giorni_attuali = 0
             for data, codici in self.calendario.items():
@@ -420,7 +417,11 @@ class GeneratoreTurni:
             if differenza > 0:
                 # Servono più giorni: aggiungi G extra
                 print(f"  Turno {turno}: {giorni_attuali} giorni, aggiungo {differenza} G")
-                self._aggiungi_g_extra(turno, differenza)
+                # Per turno 46, usa metodo speciale che esclude mesi estivi
+                if turno == 46:
+                    self._aggiungi_g_turno46(differenza)
+                else:
+                    self._aggiungi_g_extra(turno, differenza)
             elif differenza < 0:
                 # Troppi giorni: rimuovi alcuni G
                 print(f"  Turno {turno}: {giorni_attuali} giorni, rimuovo {-differenza} G")
@@ -467,6 +468,10 @@ class GeneratoreTurni:
                 if data.month != mese_target:
                     continue
 
+                # REGOLA: G dalla seconda settimana in poi (dal giorno 8)
+                if data.day < 8:
+                    continue
+
                 codice = self.calendario[data][turno]
 
                 # Converti riposo in G (preferibilmente posizione 4, fallback posizione 5)
@@ -494,6 +499,10 @@ class GeneratoreTurni:
                 if data.month != mese_extra:
                     continue
 
+                # REGOLA: G dalla seconda settimana in poi (dal giorno 8)
+                if data.day < 8:
+                    continue
+
                 # Salta se Maggio ha già 1 G
                 if g_per_mese.get(mese_extra, 0) >= 1:
                     break
@@ -512,6 +521,57 @@ class GeneratoreTurni:
                         aggiunti += 1
                         g_per_mese[mese_extra] = g_per_mese.get(mese_extra, 0) + 1
                         break  # Max 1 G anche in Maggio
+
+    def _aggiungi_g_turno46(self, quanti: int):
+        """Aggiunge G al turno 46 escludendo i mesi estivi (giugno, luglio, agosto, settembre)"""
+        aggiunti = 0
+        turno = 46
+
+        # Conta G già presenti per mese
+        g_per_mese = {}
+        for data, codici in self.calendario.items():
+            if codici[turno] == 'G':
+                mese = data.month
+                g_per_mese[mese] = g_per_mese.get(mese, 0) + 1
+
+        # Mesi disponibili per turno 46: tutti TRANNE giugno(6), luglio(7), agosto(8), settembre(9)
+        mesi_disponibili = [1, 2, 3, 4, 5, 10, 11, 12]  # Gen, Feb, Mar, Apr, Mag, Ott, Nov, Dic
+
+        for mese_target in mesi_disponibili:
+            if aggiunti >= quanti:
+                break
+
+            # Max 1 G per mese
+            if g_per_mese.get(mese_target, 0) >= 1:
+                continue
+
+            # Cerca riposi disponibili in questo mese
+            for data in sorted(self.calendario.keys()):
+                if aggiunti >= quanti:
+                    break
+
+                if data.month != mese_target:
+                    continue
+
+                # G dalla seconda settimana in poi (dal giorno 8)
+                if data.day < 8:
+                    continue
+
+                codice = self.calendario[data][turno]
+
+                # Converti riposo in G
+                if codice == '-' and not is_weekend_or_festivo(data):
+                    # Per turno 46, usa il pattern speciale (ciclo 10 giorni)
+                    primo_gennaio = date(data.year, 1, 1)
+                    giorni_trascorsi = (data - primo_gennaio).days
+                    posizione = (self.offset_iniziale[46] + giorni_trascorsi) % 10
+
+                    # Aggiungi G in posizione riposo (posizioni 4 o 5)
+                    if posizione in [4, 5]:
+                        self.calendario[data][turno] = 'G'
+                        aggiunti += 1
+                        g_per_mese[mese_target] = g_per_mese.get(mese_target, 0) + 1
+                        break  # Max 1 G per mese
 
     def _rimuovi_g_extra(self, turno: int, quanti: int):
         """Rimuove G extra per raggiungere il target"""
@@ -764,8 +824,11 @@ class GeneratoreTurni:
     def _formatta_cella(self, cell, codice: str, data: date, turno: int):
         """Applica formattazione alla cella"""
 
-        # Colore di sfondo - priorità alle festività/weekend, poi ai codici
-        if is_festivo(data) or (data.weekday() == 6):  # Domenica o festivo
+        # Colore di sfondo - PRIORITÀ ASSOLUTA ALLE FERIE (sempre gialle)
+        if codice.startswith('F'):
+            # Giallo chiaro per ferie - SEMPRE, anche se sabato/domenica/festivo
+            cell.fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
+        elif is_festivo(data) or (data.weekday() == 6):  # Domenica o festivo
             # Rosso per domeniche e festivi
             cell.fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
             cell.font = Font(color="FFFFFF", bold=True)  # Testo bianco
@@ -776,9 +839,6 @@ class GeneratoreTurni:
         elif codice == 'G' and turno != 46:
             # Verde chiaro per G, ECCETTO turno 46
             cell.fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
-        elif codice.startswith('F'):
-            # Giallo chiaro per ferie
-            cell.fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
 
         # Bordi
         thin_border = Side(style='thin', color='000000')
